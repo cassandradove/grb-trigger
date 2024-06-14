@@ -1,25 +1,13 @@
 import numpy as np
-from collections import deque
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from lifo_queue import FixedLengthLIFOQueue
+from grb import *
+from collections import deque
 import sys
 from os import system
+from config import *
 
-# Default simulation parameters
-duration = 100                  # Duration of the simulation in seconds
-rate = 30                       # Rate of photon arrival per second
-size_list = 600                 # Length of the photon list queue
-running_avg_length = 3          # Length of running average
-
-# Default trigger parameters
-significance_constant = 6       # Standard deviation multiplier for trigger algorithm
-tail = 4                        # Length of recent data to ignore when calculating running avg/variance for trigger
-look_back_to = 17               # Length of time we look back through when calculating sigma for trigger threshold
-trigger_threshold_met = False   # Flag for trigger algorithm
-triggered_timestamp = -999      # Timestamp for when event-by-event is triggered
-
-show_peak_data = True
-random_seed = 112               # Seed for reproducibility
 np.random.seed(random_seed)     
 
 # Define the power law function - this is used to create random background energy
@@ -42,75 +30,8 @@ def get_photon_next(rate):
     photon_energy = Get_Energy()
     return time_to_next_event, photon_energy
 
-# Define the FixedLengthLIFOQueue class for photon counts
-class FixedLengthLIFOQueue:
-    def __init__(self, length):
-        self.queue = deque(maxlen=length)       # Initialize the deque with a fixed length
-        self.running_sum = 0                    # Initialize the running sum
-
-    def push(self, item):
-        if len(self.queue) == self.queue.maxlen:
-            self.running_sum -= self.queue[-1]  # Subtract the rightmost item if the queue is full
-        self.queue.appendleft(item)             # Append item to the left end of the queue
-        self.running_sum += item                # Add the new item to the running sum
-
-    def pop(self):
-        if self.queue:
-            item = self.queue.pop()             # Pop the last item from the right end of the queue
-            self.running_sum -= item            # Subtract the popped item from the running sum
-            return item
-        else:
-            return None                         # Return None if the queue is empty
-
-    def get_last(self):
-        if self.queue:
-            return self.queue[-1]               # Return the last item in the queue without removing it
-        else:
-            return None                         # Return None if the queue is empty
-
-    def get_first(self):
-        if self.queue:
-            return self.queue[0]                # Return the first item in the queue without removing it
-        else:
-            return None                         # Return None if the queue is empty
-
-    def size(self):
-        return len(self.queue)                  # Return the length of the queue
-
-    def get_item(self, index):
-        if 0 <= index < len(self.queue):
-            return self.queue[index]            # Return the item at the specified index
-        else:
-            return None                         # Return None if the index is out of range
-
-    def get_running_average(self):
-        if self.queue:
-            return self.running_sum / len(self.queue)  # Return the running average
-        else:
-            return 0                                   # Return 0 if the queue is empty
-        
-# Gamma ray burst class with default values
-class grb :
-    peak_time = np.random.uniform(0.25 * duration, 0.75 * duration)
-    amplitude = 5
-    sigma = 1
-
-    # Quick initialization of a GRB with default values that can be overridden if so desired
-    def __init__(self, peak_time = np.random.uniform(0.25 * duration, 0.75 * duration), amplitude = 5, sigma = 1):
-        self.peak_time = peak_time
-        self.amplitude = amplitude
-        self.sigma = sigma
-
-    # Returns a Gaussian curve with respect to time that can be added onto background noise to represent a GRB
-    def burst_addition(self, curr_time):
-        exponent = ((curr_time - self.peak_time) ** 2) / (-2 * self.sigma)
-        return self.amplitude * np.exp(exponent)
-
-short_grb = grb(amplitude=20, sigma = 0.001)
-long_grb = [grb(peak_time=duration/2, amplitude=2, sigma=5), grb(peak_time=duration/2 + 5, amplitude=3, sigma=5), grb(peak_time=duration/2 + 10, amplitude=2, sigma=5)]
-
 bursts = []
-bursts += long_grb
+bursts += lgrb
 
 # Store data for plotting
 photon_count_data = []
@@ -219,7 +140,6 @@ def display_plots() :
     textbox_ax = fig.add_subplot(gs[:, 1])
     textbox_ax.axis('off')
     textbox_ax.text(0.1, 0.5, all_variables_str(), verticalalignment='center', horizontalalignment='left')
-    #plt.constrained_
     plt.tight_layout()
     plt.show()
 
@@ -361,14 +281,14 @@ def burst_info_str() :
     return summary
 
 def display_burst_info() :
+    system('cls')
     print(burst_info_str())
+    press_any_key_to_continue()
 
-def delete_burst_helper(i) :
-    del bursts[i]
 
 def delete_burst() :
     system('cls')
-    display_burst_info()
+    print(burst_info_str())
     ans = ''
     while ans != 'y' and ans != 'n' :
         ans = input(
@@ -378,10 +298,140 @@ def delete_burst() :
         delete_index = int(
             input('\nEnter the number of the burst you\'d like to delete: ')
         )
-        delete_burst_helper(delete_index)
+        del bursts[delete_index]
         print('\nBurst ' + str(delete_index) + ' was sucessfully deleted.')
         press_any_key_to_continue()
-    
+
+def add_burst() :
+    system('cls')
+    print(burst_info_str())
+    ans = ''
+    while ans != 'y' and ans != 'n' :
+        ans = input(
+            '\nWould you like to add a burst? (y/n) '
+        )
+    if ans == 'y' :
+        add_burst_helper()
+    else :
+        press_any_key_to_continue()
+
+def return_to_burst_menu() :
+    press_any_key_to_continue()
+    modify_bursts()
+
+def add_burst_helper() :
+    system('cls')
+    functions_names = [add_sgrb, add_lgrb, return_to_burst_menu]
+    menu_items = dict(enumerate(functions_names, start=0))
+    while True:
+        print(burst_info_str())
+        print('\nAdd burst options: ')
+        display_menu(menu_items)
+        selection = int(
+            input("Please enter your selection number: ")
+        )
+        selected_value = menu_items[selection]
+        selected_value()
+
+def add_sgrb() :
+    add_grb(grb(sgrb_peak_time, sgrb_A, sgrb_sigma))
+def add_lgrb() :
+    add_grb(grb(lgrb_peak_time, lgrb_A, lgrb_sigma))
+
+def add_grb(burst) :
+    system('cls')
+    print(burst_info_str())
+    print('\nDefault parameters: ')
+    print('\tPeaks at ' + str(burst.peak_time) + '\n\tA = ' + str(burst.amplitude) + '\n\tSigma = ' + str(burst.sigma))
+    ans = 99
+    while ans != 0 and ans != 1 and ans != 2:
+        print('\nWould you like to \n\t0: Add the default burst\n\t1: Modify the burst\n\t2: Return to menu')
+        ans = int(input('\nEnter 0, 1, or 2: '))
+    if ans == 0 :
+        bursts.append(burst)
+        i = 99
+        while i != 0 and i != 1 :
+            i = int(input('Success! Press 0 to add another burst or 1 to return to main menu'))
+        if i == 0 :
+            add_burst_helper()
+        else :
+            return_to_menu()
+    elif ans == 1 :
+        modify(burst)
+    else :
+        press_any_key_to_continue
+
+def modify(burst) :
+    system('cls')
+    print(burst_info_str())
+    print('\nBurst to add: ')
+    print('\tPeaks at ' + str(burst.peak_time) + '\n\tA = ' + str(burst.amplitude) + '\n\tSigma = ' + str(burst.sigma))
+
+    print('\nWould you like to\n\t0: Modify peak time\n\t1: Modify amplitude\n\t2: Modify sigma\n\t3: Confirm burst\n\t4: Cancel')
+    ans = 99
+    while ans != 0 and ans != 1 and ans != 2 and ans !=3 and ans != 4:
+        ans = int (input ('\nEnter your numerical selection: '))
+    if ans == 0 :
+        modify_peak_time(burst)
+        modify(burst)
+    if ans == 1 :
+        modify_amplitude(burst)
+        modify(burst)
+    if ans == 2 :
+        modify_sigma(burst)
+        modify(burst)
+    if ans == 3 :
+        conf = ''
+        while conf != 'y' and conf != 'n' :
+            conf = input('Confirm modifications and add to simulation? (y/n) ')
+        if conf == 'y' :
+            bursts.append(burst)
+            i = 99
+            while i != 0 and i != 1 :
+                i = int(input('Success! Press 0 to add another burst or 1 to return to main menu '))
+                if i == 0 :
+                    add_burst_helper()
+                else :
+                    return_to_menu()
+        else :
+            modify(burst)
+    if ans == 4 :
+        return_to_burst_menu()
+
+def modify_peak_time(burst) :
+    print('Current peak time: ' + str(burst.peak_time))
+    new_peak = float(
+        input('\nEnter new peak time: ')
+    )
+    burst.peak_time = new_peak
+    print('\nNew peak time: ' + str(burst.peak_time))
+
+def modify_amplitude(burst) : 
+    print('Current amplitude: ' + str(burst.amplitude))
+    new_A = float(
+        input('\nEnter a new amplitude: ')
+    )
+    burst.amplitude = new_A
+    print('\nNew amplitude: ' + str(burst.amplitude))
+
+def modify_sigma(burst) :
+    print('Current sigma: ' + str(burst.sigma)) 
+    new_sigma = float(
+        input('\nEnter new sigma: ')
+    )
+    burst.sigma = new_sigma
+    print('\nNew sigma: ' + str(burst.sigma))
+
+def confirm_burst(burst) :
+    print('Burst to be added to simulation: ')
+    print(burst)
+    ans = ''
+    while ans != 'y' and ans != 'n' :
+        ans = input('Confirm your selection? (y/n)')
+    if ans == 'n' :
+        modify(burst)
+        bursts.append(burst)
+        return_to_burst_menu()
 
 def all_variables_str() : 
     summary = basic_sim_variables_str() + '\n' + trigger_variables_str()
@@ -394,17 +444,17 @@ def display_all_variables() :
     print('\nCurrent settings: ')
     print(all_variables_str())
     x = 999
-    while x != '0' and x != 1 :
+    while (x != '0' and x != '1') :
         x = str(
             input('\nEnter 0 to modify variables, or 1 to return to main menu: ')
         )
     if x == '0' :
         modify_variables()
-    else :
-        main()
+    if x == '1' :
+        return_to_menu()
 
 def modify_bursts() :
-    functions_names = [display_burst_info, delete_burst, return_to_modification_menu, return_to_menu]
+    functions_names = [display_burst_info, add_burst, delete_burst, return_to_modification_menu, return_to_menu]
     menu_items = dict(enumerate(functions_names, start=0))
     while True:
         system('cls')
