@@ -21,6 +21,5 @@ class grb :
         return 'Peak time: ' + str(round(self.peak_time, 2)) + 's, A=' + str(self.amplitude) + ', sigma=' + str(self.sigma)
 
 # Default GRBs
-sgrb = [grb(sgrb_peak_time, amplitude=sgrb_A, sigma = sgrb_sigma)]
-lgrb = [grb(peak_time=lgrb_peak_time, amplitude=lgrb_A, sigma=lgrb_sigma)]
-default_sim_grb = [lgrb, grb(peak_time=duration/2 + 5, amplitude=3, sigma=5), grb(peak_time=duration/2 + 10, amplitude=2, sigma=5)]
+sgrb = grb(sgrb_peak_time, amplitude=sgrb_A, sigma = sgrb_sigma)
+lgrb = grb(peak_time=lgrb_peak_time, amplitude=lgrb_A, sigma=lgrb_sigma)

@@ -30,8 +30,7 @@ def get_photon_next(rate):
     photon_energy = Get_Energy()
     return time_to_next_event, photon_energy
 
-bursts = []
-bursts += lgrb
+bursts = [lgrb, grb(peak_time=duration/2 + 5, amplitude=3, sigma=5), grb(peak_time=duration/2 + 10, amplitude=2, sigma=5)]
 
 # Store data for plotting
 photon_count_data = []
@@ -63,6 +62,7 @@ def sim() :
         for burst in bursts :
             photon_count_in_last_second += burst.burst_addition(current_time)
 
+        # Logic determining if we trigger threshold has been met
         if current_time > look_back_to :
             look_back_std = np.std(running_average[(-1 * look_back_to) : (-1 * tail)])
             threshold = running_average[-1 * tail] + significance_constant * look_back_std
@@ -70,8 +70,9 @@ def sim() :
             if (trigger_threshold_met == False and photon_count_data[-1] >= threshold) :
                 trigger_threshold_met = True
                 global triggered_timestamp
-                triggered_timestamp = current_time - tail
+                triggered_timestamp = current_time
 
+        # Filling running average list
         if current_time < duration:
             photon_list_queue.appendleft((current_time, photon_energy))
             photon_count_in_last_second += 1
@@ -284,7 +285,6 @@ def display_burst_info() :
     system('cls')
     print(burst_info_str())
     press_any_key_to_continue()
-
 
 def delete_burst() :
     system('cls')
