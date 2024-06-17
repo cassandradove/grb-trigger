@@ -18,7 +18,7 @@ def power_law(index, min_energy, max_energy):
 
 # Define the Get_Energy function - this is used for random background energy
 def Get_Energy():
-    index = -2.0                # Index of the spectrum.
+    index = 0                # Index of the spectrum.
     min_energy = 1.0            # Minimum energy.
     max_energy = 1000.0         # Maximum energy.
     energy = power_law(index, min_energy, max_energy)
@@ -35,6 +35,8 @@ bursts = [lgrb, grb(peak_time=duration/2 + 5, amplitude=3, sigma=5), grb(peak_ti
 # Store data for plotting
 photon_count_data = []
 running_average = []
+light_curve_counts = []
+light_curve_timestamps = []
 
 # Initialize the FixedLengthLIFOQueue for photon counts
 photon_list_queue = deque(maxlen=size_list)
@@ -46,8 +48,10 @@ def sim() :
     photon_list_queue.clear()
     np.random.seed(random_seed)
     current_time = 0
-    accumulated_time = 0
+    ra_accumulated_time = 0         # running average accumulated time (helper)
+    ebe_accumulated_time = 0        # event-by-event accumulated time (helper)
     photon_count_in_last_second = 0
+    ebe_binned_photon_count = 0
     trigger_threshold_met = False
 
     # Initialize the FixedLengthLIFOQueue for running averages
@@ -57,7 +61,7 @@ def sim() :
         time_to_next_event, photon_energy = get_photon_next(rate)
 
         current_time += time_to_next_event
-        accumulated_time += time_to_next_event
+        ra_accumulated_time += time_to_next_event
 
         for burst in bursts :
             photon_count_in_last_second += burst.burst_addition(current_time)
@@ -76,8 +80,9 @@ def sim() :
         if current_time < duration:
             photon_list_queue.appendleft((current_time, photon_energy))
             photon_count_in_last_second += 1
+                
             
-            if accumulated_time >= 1:
+            if ra_accumulated_time >= 1:
                 # Push the photon count for the last second into the photon count queues
                 photon_count_queue.push(photon_count_in_last_second)
                 
@@ -89,7 +94,20 @@ def sim() :
 
                 # Reset for the next second
                 photon_count_in_last_second = 0
-                accumulated_time -= 1
+                ra_accumulated_time -= 1
+            
+            # Filling lists for light curve
+            if trigger_threshold_met :
+                for burst in bursts :
+                    ebe_binned_photon_count += burst.burst_addition(current_time)
+                ebe_accumulated_time += time_to_next_event
+                ebe_binned_photon_count += 1 
+                if ebe_accumulated_time >= ebe_bin_length :
+                    light_curve_counts.append(ebe_binned_photon_count)
+                    light_curve_timestamps.append(current_time)
+
+                    ebe_accumulated_time = 0
+                    ebe_binned_photon_count = 0
 
 def display_plots() :
     # Determine the common y-axis range
@@ -102,10 +120,11 @@ def display_plots() :
     photon_count_errors = [np.sqrt(count) for count in photon_count_data]
 
     fig = plt.figure(figsize=(10,6))
-    gs = gridspec.GridSpec(2, 2, width_ratios=[3, 1])
+    gs = gridspec.GridSpec(3, 2, width_ratios=[3, 1])
 
-    ax1 = fig.add_subplot(gs[0,0])
-    ax2 = fig.add_subplot(gs[1,0])
+    ax1 = fig.add_subplot(gs[0,0])  # photon counts
+    ax2 = fig.add_subplot(gs[1,0])  # running average
+    ax3 = fig.add_subplot(gs[2,0])  # burst light curve
 
     # # Plotting the results
     # fig, axs = plt.subplots(2, 1, figsize=(12, 10))
@@ -135,6 +154,11 @@ def display_plots() :
     ax2.set_ylim(y_range_min, y_range_max)  # Set the same y-axis range for all plots
     ax2.legend()
 
+    # Plot light curve
+    ax3.stairs(light_curve_counts[1:], light_curve_timestamps, color='red')
+    ax3.set_xlabel('Time')
+    ax3.set_ylabel('Counts')
+    ax3.set_title('Light Curve')
 
     # Add textbox with variable information
     #textbox_ax = fig.add_axes([0.85, 0.2, 0.1, 0.6])
@@ -253,10 +277,8 @@ def change_look_back_to() :
 def t() :
     return '     '
 
-def press_any_key_to_continue() :
-    i = ''
-    while i == '' :
-        i = input('Press any key, then ENTER, to continue: ')
+def press_enter_to_continue() :
+    i = input('Press ENTER to continue: ')
 
 def basic_sim_variables_str() : 
     summary = ( '\nBasic simulation variables: ' + 
@@ -284,7 +306,7 @@ def burst_info_str() :
 def display_burst_info() :
     system('cls')
     print(burst_info_str())
-    press_any_key_to_continue()
+    press_enter_to_continue()
 
 def delete_burst() :
     system('cls')
@@ -300,7 +322,7 @@ def delete_burst() :
         )
         del bursts[delete_index]
         print('\nBurst ' + str(delete_index) + ' was sucessfully deleted.')
-        press_any_key_to_continue()
+        press_enter_to_continue()
 
 def add_burst() :
     system('cls')
@@ -313,10 +335,10 @@ def add_burst() :
     if ans == 'y' :
         add_burst_helper()
     else :
-        press_any_key_to_continue()
+        press_enter_to_continue()
 
 def return_to_burst_menu() :
-    press_any_key_to_continue()
+    press_enter_to_continue()
     modify_bursts()
 
 def add_burst_helper() :
@@ -359,7 +381,7 @@ def add_grb(burst) :
     elif ans == 1 :
         modify(burst)
     else :
-        press_any_key_to_continue
+        press_enter_to_continue
 
 def modify(burst) :
     system('cls')
@@ -478,17 +500,18 @@ def return_to_menu() :
     main()
 
 def modify_variables() :
-    system('cls')
     functions_names = [display_all_variables, change_duration, change_rate, change_photon_list_length, change_running_average_length, 
                        change_significance_constant, change_tail_length, change_look_back_to, modify_bursts, return_to_menu]
     menu_items = dict(enumerate(functions_names, start=0))
     while True:
+        system('cls')
         print('\nModification options: ')
         display_menu(menu_items)
         selection = int(
             input("Please enter your selection number: "))      # Get function key
         selected_value = menu_items[selection]                  # Gets the function name
         selected_value()                                        # add parentheses to call the function
+        press_enter_to_continue()
 
 def run_simulation_and_plot() :
     global show_peak_data
