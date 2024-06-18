@@ -46,6 +46,8 @@ def sim() :
     photon_count_data.clear()
     running_average.clear()
     photon_list_queue.clear()
+    light_curve_counts.clear()
+    light_curve_timestamps.clear()
     np.random.seed(random_seed)
     current_time = 0
     ra_accumulated_time = 0         # running average accumulated time (helper)
@@ -53,6 +55,7 @@ def sim() :
     photon_count_in_last_second = 0
     ebe_binned_photon_count = 0
     trigger_threshold_met = False
+    already_triggered = False
 
     # Initialize the FixedLengthLIFOQueue for running averages
     photon_count_queue = FixedLengthLIFOQueue(running_avg_length)
@@ -67,14 +70,23 @@ def sim() :
             photon_count_in_last_second += burst.burst_addition(current_time)
 
         # Logic determining if we trigger threshold has been met
-        if current_time > look_back_to :
-            look_back_std = np.std(running_average[(-1 * look_back_to) : (-1 * tail)])
-            threshold = running_average[-1 * tail] + significance_constant * look_back_std
+        if current_time > enter_look_back_to and not already_triggered:
+            look_back_std = np.std(running_average[(-1 * enter_look_back_to) : (-1 * tail)])
+            threshold = running_average[-1 * tail] + enter_significance_constant * look_back_std
             
             if (trigger_threshold_met == False and photon_count_data[-1] >= threshold) :
                 trigger_threshold_met = True
                 global triggered_timestamp
                 triggered_timestamp = current_time
+        
+        if trigger_threshold_met :
+            look_back_std = np.std(running_average[(-1 * exit_look_back_to) : (-1 * tail)])
+            threshold = running_average[-1 * tail] - exit_significance_constant * look_back_std
+            if photon_count_data[-1] <= threshold : 
+                trigger_threshold_met = False
+                global exit_timestamp
+                exit_timestamp = current_time
+                already_triggered = True
 
         # Filling running average list
         if current_time < duration:
@@ -145,14 +157,16 @@ def display_plots() :
     ax1.legend()
 
     # Plot running average
-    ax2.plot(running_average, 'o', label='Running Average (' + str(running_avg_length) + ' seconds)', color='orange')
-    ax2.vlines(triggered_timestamp, y_range_min, y_range_max, label='Threshold Triggered')
-    ax2.annotate(str(round(triggered_timestamp,2)) + 's', (triggered_timestamp + 0.5, y_range_max / 2), xycoords='data', xytext=(-0.5,0), textcoords='offset fontsize', ha='right')
+    ax2.plot(running_average, 'o', label='Running Average', color='orange')
+    ax2.vlines(triggered_timestamp, y_range_min, y_range_max, label='EBE Entered')
+    ax2.vlines(exit_timestamp, y_range_min, y_range_max, label='EBE Exited')
+    ax2.annotate(str(round(triggered_timestamp,2)) + 's', (triggered_timestamp + 0.5, y_range_max * .8), xycoords='data', xytext=(-0.5,0), textcoords='offset fontsize', ha='right')
+    ax2.annotate(str(round(exit_timestamp,2)) + 's', (exit_timestamp + 0.5, y_range_max * .8), xycoords='data', xytext=(0.5,0), textcoords='offset fontsize', ha='left')
     ax2.set_xlabel('Time (seconds)')
     ax2.set_ylabel('Running Average')
     ax2.set_title('Running Average of Photon Count (' + str(running_avg_length) + ' seconds)')
     ax2.set_ylim(y_range_min, y_range_max)  # Set the same y-axis range for all plots
-    ax2.legend()
+    ax2.legend(loc='upper right')
 
     # Plot light curve
     ax3.stairs(light_curve_counts[1:], light_curve_timestamps, color='red')
@@ -168,110 +182,60 @@ def display_plots() :
     plt.tight_layout()
     plt.show()
 
-def change_running_average_length() :
-    global running_avg_length
+def change_var(var, var_name, var_type, var_units) :
     mod = ''
     while (mod != 'y' and mod != 'n') :
         mod = str(
-            input('\nCurrent running average length is ' + str(running_avg_length) + 's. Would you like to modify it? (y/n) ')
+            input('\nCurrent ' + var_name + ' is ' + str(var) + ' ' + var_units + '. Would you like to modify it? (y/n) ')
         )
     if mod == 'n' :
         modify_variables()
     else :
-        running_avg_length = int(
-            input('\nEnter the new running average length: ')
+        var = var_type(
+            input('\nEnter the new value for ' + var_name + ': ' )
         )
-        print('\nRunning average length has been changed to ' + str(running_avg_length) + 's!')
+        print('\n' + var_name + ' has been changed to ' + str(var) + ' ' + var_units + '!\n')
+        return var
+
+def change_running_average_length() :
+    global running_avg_length
+    running_avg_length = change_var(running_avg_length, 'RUNNING AVG LENGTH', int, 's')
 
 def change_rate() :
     global rate
-    mod = ''
-    while (mod != 'y' and mod != 'n') :
-        mod = str(
-            input('\nCurrent rate is ' + str(rate) + ' photons/s. Would you like to modify it? (y/n) ')
-        )
-    if mod == 'n' :
-        modify_variables()
-    else :
-        rate = int(
-            input('\nEnter the new rate: ')
-        )
-        print('\nRate has been changed to ' + str(rate) + ' photons/s!')
+    rate = change_var(rate, 'RATE', int, 'photons/s')
 
 def change_duration() :
     global duration
-    mod = ''
-    while (mod != 'y' and mod != 'n') :
-        mod = str(
-            input('\nCurrent duration is ' + str(duration) + 's. Would you like to modify it? (y/n) ')
-        )
-    if mod == 'n' :
-        modify_variables()
-    else :
-        duration = int(
-            input('\nEnter the new duration: ')
-        )
-        print('\nDuration has been changed to ' + str(duration) + 's!')
+    duration = change_var(duration, 'DURATION', int, 's')
 
 def change_photon_list_length() :
     global size_list
-    mod = ''
-    while (mod != 'y' and mod != 'n') :
-        mod = str(
-            input('\nCurrent size of photon list is ' + str(size_list) + ' photons. Would you like to modify it? (y/n) ')
-        )
-    if mod == 'n' :
-        modify_variables()
-    else :
-        size_list = int(
-            input('\nEnter the new photon list length: ')
-        )
-        print('\nPhoton list length has been changed to ' + str(size_list) + ' photons!')
+    size_list = change_var(size_list, 'PHOTON LIST SIZE', int, 'photons')
 
 def change_significance_constant() :
-    global significance_constant
-    mod = ''
-    while (mod != 'y' and mod != 'n') :
-        mod = str(
-            input('\nCurrent significance constant is ' + str(significance_constant) + '. Would you like to modify it? (y/n) ')
-        )
-    if mod == 'n' :
-        modify_variables()
-    else :
-        significance_constant = int(
-            input('\nEnter the new significance constant: ')
-        )
-        print('\nSignificance constant has been changed to ' + str(significance_constant) + '!')
+    global enter_significance_constant
+    enter_significance_constant = change_var(enter_significance_constant, 'SIGNIFICANCE CONSTANT (TRIGGER)', float, '')
+
+def change_exit_significance_constant() :
+    global exit_significance_constant
+    exit_significance_constant = change_var(exit_significance_constant, 'SIGNIFICANCE CONSTANT (EXIT TRIGGER)', float, '')
 
 def change_tail_length() :
     global tail
-    mod = ''
-    while (mod != 'y' and mod != 'n') :
-        mod = str(
-            input('\nCurrent tail is ' + str(tail) + 's. Would you like to modify it? (y/n) ')
-        )
-    if mod == 'n' :
-        modify_variables()
-    else :
-        tail = int(
-            input('\nEnter the new tail: ')
-        )
-        print('\nTail has been changed to ' + str(tail) + 's!')
+    tail = change_var(tail, 'TAIL LENGTH', int, 's')
 
-def change_look_back_to() :
-    global look_back_to
-    mod = ''
-    while mod != 'y' and mod != 'n' :
-        mod = str(
-            input('\nCurrent look_back_to is ' + str(look_back_to) + 's. Would you like to modify it? (y/n) ') 
-        )
-    if mod == 'n' :
-        modify_variables()
-    else :
-        look_back_to = int(
-            input('\nEnter the new look_back_to: ')
-        )
-        print('\nLook_back_to has been changed to ' + str(look_back_to) + 's!')
+def change_enter_look_back_to() :
+    global enter_look_back_to
+    enter_look_back_to = change_var(enter_look_back_to, 'LOOK BACK TO (TRIGGER)', int, 's')
+
+def change_exit_look_back_to() :
+    global exit_look_back_to
+    exit_look_back_to = change_var(exit_look_back_to, 'LOOK BACK TO (EXIT)', int, 's')
+
+def change_event_by_event_bin_length() :
+    global ebe_bin_length
+    ebe_bin_length = change_var(ebe_bin_length, 'EVENT-BY-EVENT BIN LENGTH', float, 's')
 
 # tab function (pyplot won't allow \t)
 def t() :
@@ -285,14 +249,17 @@ def basic_sim_variables_str() :
                 '\n' + t() + 'Simulation duration (in seconds) : ' + str(duration) + 
                 '\n' + t() + 'Rate of photon arrival per second: ' + str(rate) + 
                 '\n' + t() + 'Length of the photon list queue: ' + str(size_list) +
-                '\n' + t() + 'Running average length (in seconds): ' + str(running_avg_length))
+                '\n' + t() + 'Running average length (in seconds): ' + str(running_avg_length) + 
+                '\n' + t() + 'Event-by-event bin duration (in seconds): ' + str(ebe_bin_length))
     return summary
 
 def trigger_variables_str() : 
     summary = ( '\nTrigger Variables: ' + 
-                '\n' + t() + 'Significance constant: ' + str(significance_constant) + 
+                '\n' + t() + 'Trigger significance constant: ' + str(enter_significance_constant) + 
+                '\n' + t() + 'Exit trigger significance constant ' + str(exit_significance_constant) + 
                 '\n' + t() + 'Tail length (in seconds): ' + str(tail) + 
-                '\n' + t() + 'Lookback duration (in seconds): ' + str(look_back_to))
+                '\n' + t() + 'Trigger lookback duration (in seconds): ' + str(enter_look_back_to) +
+                '\n' + t() + 'Exit trigger lookback duration (in seconds): ' + str(exit_look_back_to)) 
     return summary
 
 def burst_info_str() : 
@@ -322,6 +289,19 @@ def delete_burst() :
         )
         del bursts[delete_index]
         print('\nBurst ' + str(delete_index) + ' was sucessfully deleted.')
+        press_enter_to_continue()
+
+def clear_bursts() :
+    system('cls')
+    print(burst_info_str())
+    ans = ''
+    while ans != 'y' and ans != 'n' :
+        ans = input(
+            '\nWould you like to delete all bursts? (y/n) '
+        )
+    if ans == 'y' :
+        bursts.clear()
+        print('\nBurst list was successfully cleared.')
         press_enter_to_continue()
 
 def add_burst() :
@@ -377,7 +357,7 @@ def add_grb(burst) :
         if i == 0 :
             add_burst_helper()
         else :
-            return_to_menu()
+            return_to_main_menu()
     elif ans == 1 :
         modify(burst)
     else :
@@ -414,7 +394,7 @@ def modify(burst) :
                 if i == 0 :
                     add_burst_helper()
                 else :
-                    return_to_menu()
+                    return_to_main_menu()
         else :
             modify(burst)
     if ans == 4 :
@@ -473,10 +453,10 @@ def display_all_variables() :
     if x == '0' :
         modify_variables()
     if x == '1' :
-        return_to_menu()
+        return_to_main_menu()
 
 def modify_bursts() :
-    functions_names = [display_burst_info, add_burst, delete_burst, return_to_modification_menu, return_to_menu]
+    functions_names = [display_burst_info, add_burst, delete_burst, clear_bursts, return_to_modification_menu, return_to_main_menu]
     menu_items = dict(enumerate(functions_names, start=0))
     while True:
         system('cls')
@@ -496,16 +476,45 @@ def exit() :
     print("Goodbye")
     sys.exit()
 
-def return_to_menu() :
+def return_to_main_menu() :
     main()
 
 def modify_variables() :
-    functions_names = [display_all_variables, change_duration, change_rate, change_photon_list_length, change_running_average_length, 
-                       change_significance_constant, change_tail_length, change_look_back_to, modify_bursts, return_to_menu]
+    # functions_names = [display_all_variables, change_duration, change_rate, change_photon_list_length, change_running_average_length, 
+    #                    change_significance_constant, change_tail_length, change_enter_look_back_to, modify_bursts, return_to_main_menu]
+    functions_names = [modify_basic_simulation_variables, modify_trigger_variables, modify_bursts, return_to_main_menu]
     menu_items = dict(enumerate(functions_names, start=0))
     while True:
         system('cls')
-        print('\nModification options: ')
+        print('Modification options: ')
+        display_menu(menu_items)
+        selection = int(
+            input("Please enter your selection number: "))      # Get function key
+        selected_value = menu_items[selection]                  # Gets the function name
+        selected_value()                                        # add parentheses to call the function
+        press_enter_to_continue()
+
+def modify_basic_simulation_variables() :
+    functions_names = [display_all_variables, change_duration, change_rate, change_photon_list_length, change_running_average_length, 
+                       change_event_by_event_bin_length, return_to_modification_menu, return_to_main_menu]
+    menu_items = dict(enumerate(functions_names, start=0))
+    while True:
+        system('cls')
+        print('Basic simulation modification options: ')
+        display_menu(menu_items)
+        selection = int(
+            input("Please enter your selection number: "))      # Get function key
+        selected_value = menu_items[selection]                  # Gets the function name
+        selected_value()                                        # add parentheses to call the function
+        press_enter_to_continue()
+
+def modify_trigger_variables() :
+    functions_names = [display_all_variables, change_significance_constant, change_exit_significance_constant, change_tail_length, change_enter_look_back_to, 
+                       change_exit_look_back_to, return_to_modification_menu, return_to_main_menu]
+    menu_items = dict(enumerate(functions_names, start=0))
+    while True:
+        system('cls')
+        print('Trigger algorithm variable modification options: ')
         display_menu(menu_items)
         selection = int(
             input("Please enter your selection number: "))      # Get function key
