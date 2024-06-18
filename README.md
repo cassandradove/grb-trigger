@@ -15,4 +15,5 @@
 <p>To Do:</p>
 <ul>
   <li>Functionality to export/import data to simulate</li>
+  <li>Create basic flares that look like the ones BTO will see</li>
 </ul>
