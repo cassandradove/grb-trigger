@@ -16,9 +16,9 @@ def power_law(index, min_energy, max_energy):
     energy = ((max_energy**(index + 1) - min_energy**(index + 1)) * random_value + min_energy**(index + 1))**(1/(index + 1))
     return energy
 
-# Define the Get_Energy function - this is used for random background energy
+# Define the Get_Energy function
 def Get_Energy():
-    index = 0                # Index of the spectrum.
+    index = -0.1                # Index of the spectrum.
     min_energy = 1.0            # Minimum energy.
     max_energy = 1000.0         # Maximum energy.
     energy = power_law(index, min_energy, max_energy)
@@ -166,7 +166,7 @@ def display_plots() :
     ax2.set_ylabel('Running Average')
     ax2.set_title('Running Average of Photon Count (' + str(running_avg_length) + ' seconds)')
     ax2.set_ylim(y_range_min, y_range_max)  # Set the same y-axis range for all plots
-    ax2.legend(loc='upper right')
+    ax2.legend()
 
     # Plot light curve
     ax3.stairs(light_curve_counts[1:], light_curve_timestamps, color='red')
@@ -182,6 +182,9 @@ def display_plots() :
     plt.tight_layout()
     plt.show()
 
+#   Variable Modification Methods
+
+#   Default method to change a global var in config.py
 def change_var(var, var_name, var_type, var_units) :
     mod = ''
     while (mod != 'y' and mod != 'n') :
@@ -197,6 +200,7 @@ def change_var(var, var_name, var_type, var_units) :
         print('\n' + var_name + ' has been changed to ' + str(var) + ' ' + var_units + '!\n')
         return var
 
+#   Basic simulation variable mod methods
 def change_running_average_length() :
     global running_avg_length
     running_avg_length = change_var(running_avg_length, 'RUNNING AVG LENGTH', int, 's')
@@ -213,6 +217,8 @@ def change_photon_list_length() :
     global size_list
     size_list = change_var(size_list, 'PHOTON LIST SIZE', int, 'photons')
 
+
+#   Trigger modification methods
 def change_significance_constant() :
     global enter_significance_constant
     enter_significance_constant = change_var(enter_significance_constant, 'SIGNIFICANCE CONSTANT (TRIGGER)', float, '')
@@ -241,9 +247,11 @@ def change_event_by_event_bin_length() :
 def t() :
     return '     '
 
+#   Used in terminal to transition between menus
 def press_enter_to_continue() :
     i = input('Press ENTER to continue: ')
 
+#   String methods
 def basic_sim_variables_str() : 
     summary = ( '\nBasic simulation variables: ' + 
                 '\n' + t() + 'Simulation duration (in seconds) : ' + str(duration) + 
@@ -275,6 +283,28 @@ def display_burst_info() :
     print(burst_info_str())
     press_enter_to_continue()
 
+def all_variables_str() : 
+    summary = basic_sim_variables_str() + '\n' + trigger_variables_str()
+    if show_peak_data :
+        summary += '\n' + burst_info_str()
+    return summary
+
+def display_all_variables() :
+    system('cls')
+    print('\nCurrent settings: ')
+    print(all_variables_str())
+    x = 999
+    while (x != '0' and x != '1') :
+        x = str(
+            input('\nEnter 0 to modify variables, or 1 to return to main menu: ')
+        )
+    if x == '0' :
+        modify_variables()
+    if x == '1' :
+        return_to_main_menu()
+
+
+#   Burst list modification methods
 def delete_burst() :
     system('cls')
     print(burst_info_str())
@@ -304,23 +334,6 @@ def clear_bursts() :
         print('\nBurst list was successfully cleared.')
         press_enter_to_continue()
 
-def add_burst() :
-    system('cls')
-    print(burst_info_str())
-    ans = ''
-    while ans != 'y' and ans != 'n' :
-        ans = input(
-            '\nWould you like to add a burst? (y/n) '
-        )
-    if ans == 'y' :
-        add_burst_helper()
-    else :
-        press_enter_to_continue()
-
-def return_to_burst_menu() :
-    press_enter_to_continue()
-    modify_bursts()
-
 def add_burst_helper() :
     system('cls')
     functions_names = [add_sgrb, add_lgrb, return_to_burst_menu]
@@ -335,8 +348,22 @@ def add_burst_helper() :
         selected_value = menu_items[selection]
         selected_value()
 
+def add_burst() :
+    system('cls')
+    print(burst_info_str())
+    ans = ''
+    while ans != 'y' and ans != 'n' :
+        ans = input(
+            '\nWould you like to add a burst? (y/n) '
+        )
+    if ans == 'y' :
+        add_burst_helper()
+    else :
+        press_enter_to_continue()
+
 def add_sgrb() :
     add_grb(grb(sgrb_peak_time, sgrb_A, sgrb_sigma))
+
 def add_lgrb() :
     add_grb(grb(lgrb_peak_time, lgrb_A, lgrb_sigma))
 
@@ -400,6 +427,10 @@ def modify(burst) :
     if ans == 4 :
         return_to_burst_menu()
 
+def return_to_burst_menu() :
+    press_enter_to_continue()
+    modify_bursts()
+
 def modify_peak_time(burst) :
     print('Current peak time: ' + str(burst.peak_time))
     new_peak = float(
@@ -435,42 +466,11 @@ def confirm_burst(burst) :
         bursts.append(burst)
         return_to_burst_menu()
 
-def all_variables_str() : 
-    summary = basic_sim_variables_str() + '\n' + trigger_variables_str()
-    if show_peak_data :
-        summary += '\n' + burst_info_str()
-    return summary
-
-def display_all_variables() :
-    system('cls')
-    print('\nCurrent settings: ')
-    print(all_variables_str())
-    x = 999
-    while (x != '0' and x != '1') :
-        x = str(
-            input('\nEnter 0 to modify variables, or 1 to return to main menu: ')
-        )
-    if x == '0' :
-        modify_variables()
-    if x == '1' :
-        return_to_main_menu()
-
-def modify_bursts() :
-    functions_names = [display_burst_info, add_burst, delete_burst, clear_bursts, return_to_modification_menu, return_to_main_menu]
-    menu_items = dict(enumerate(functions_names, start=0))
-    while True:
-        system('cls')
-        print('\nBurst Modification Menu: ')
-        display_menu(menu_items)
-        selection = int(
-            input("Please enter your selection number: ")
-        )
-        selected_value = menu_items[selection]
-        selected_value()
-
+#   Menu methods
 def return_to_modification_menu() :
     modify_variables()
 
+#   Return to previous menu methods
 def exit() : 
     system('cls')  # clears stdout
     print("Goodbye")
@@ -479,48 +479,24 @@ def exit() :
 def return_to_main_menu() :
     main()
 
+#   Modify variables menu
 def modify_variables() :
-    # functions_names = [display_all_variables, change_duration, change_rate, change_photon_list_length, change_running_average_length, 
-    #                    change_significance_constant, change_tail_length, change_enter_look_back_to, modify_bursts, return_to_main_menu]
     functions_names = [modify_basic_simulation_variables, modify_trigger_variables, modify_bursts, return_to_main_menu]
-    menu_items = dict(enumerate(functions_names, start=0))
-    while True:
-        system('cls')
-        print('Modification options: ')
-        display_menu(menu_items)
-        selection = int(
-            input("Please enter your selection number: "))      # Get function key
-        selected_value = menu_items[selection]                  # Gets the function name
-        selected_value()                                        # add parentheses to call the function
-        press_enter_to_continue()
+    menu('VARIABLE MODIFICATION MENU', functions_names)
 
 def modify_basic_simulation_variables() :
     functions_names = [display_all_variables, change_duration, change_rate, change_photon_list_length, change_running_average_length, 
                        change_event_by_event_bin_length, return_to_modification_menu, return_to_main_menu]
-    menu_items = dict(enumerate(functions_names, start=0))
-    while True:
-        system('cls')
-        print('Basic simulation modification options: ')
-        display_menu(menu_items)
-        selection = int(
-            input("Please enter your selection number: "))      # Get function key
-        selected_value = menu_items[selection]                  # Gets the function name
-        selected_value()                                        # add parentheses to call the function
-        press_enter_to_continue()
+    menu('SIMULATION VARIABLE MODIFICATION MENU', functions_names)
 
 def modify_trigger_variables() :
     functions_names = [display_all_variables, change_significance_constant, change_exit_significance_constant, change_tail_length, change_enter_look_back_to, 
                        change_exit_look_back_to, return_to_modification_menu, return_to_main_menu]
-    menu_items = dict(enumerate(functions_names, start=0))
-    while True:
-        system('cls')
-        print('Trigger algorithm variable modification options: ')
-        display_menu(menu_items)
-        selection = int(
-            input("Please enter your selection number: "))      # Get function key
-        selected_value = menu_items[selection]                  # Gets the function name
-        selected_value()                                        # add parentheses to call the function
-        press_enter_to_continue()
+    menu('TRIGGER VARIABLE MODIFICATION MENU', functions_names)
+
+def modify_bursts() :
+    functions_names = [display_burst_info, add_burst, delete_burst, clear_bursts, return_to_modification_menu, return_to_main_menu]
+    menu('BURST MODIFICATION MENU', functions_names)
 
 def run_simulation_and_plot() :
     global show_peak_data
@@ -547,19 +523,30 @@ def display_menu(menu):
         print('\t', k, function.__name__)
 
 def main():
+    functions_names = [run_simulation_and_plot, display_all_variables, modify_variables, exit]
+    menu('MAIN MENU', functions_names)
+
+def menu(name, functions):
     # Create a menu dictionary where the key is an integer number and the
     # value is a function name.
-    functions_names = [run_simulation_and_plot, display_all_variables, modify_variables, exit]
-    menu_items = dict(enumerate(functions_names, start=1))
-    system('cls')
-
-    while True:
-        print('MENU')
+    menu_items = dict(enumerate(functions, start=1))
+    
+    while True: 
+        system('cls')
+        selection = 0
+        print(name)
         display_menu(menu_items)
-        selection = int(
-            input("\nPlease enter your selection number: "))      # Get function key
-        selected_value = menu_items[selection]                  # Gets the function name
-        selected_value()                                        # add parentheses to call the function
+        while selection not in range(1,len(functions) + 1) :
+            try:
+                selection = int(
+                    input('\nPlease enter your selection number: ')
+                )
+            except:
+                continue
+        
+        selected_value = menu_items[selection]
+        selected_value()
+        press_enter_to_continue()
 
 if __name__ == "__main__":
     main()
