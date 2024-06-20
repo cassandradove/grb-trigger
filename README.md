@@ -8,11 +8,12 @@
   <li>Update trigger algorithm constants such as significance constant, "tail" length, amount of time to consider for background rate</li>
   <li>Add and delete bursts within the simulation</li>
   <li>Default lgrb and sgrb objects</li>
+  <li>Exit trigger funtionality, with customizable variables</li>
+  <li>Light curve graph using simulated trigger timeline</li>
 </ul>
 
 <p>To Do:</p>
 <ul>
-  <li>Light curve graph</li>
-  <li>Logic to exit event-by-event</li>
   <li>Functionality to export/import data to simulate</li>
+  <li>Create basic flares that look like the ones BTO will see</li>
 </ul>
