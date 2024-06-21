@@ -313,15 +313,17 @@ def trigger_variables_str() :
 def burst_info_str() : 
     summary = '\n' + 'Burst information: '
     i = 0
-    for burst in bursts :
-        summary += ('\n' + t() + 'Peak ' + str(i) + '\n' + t() + t() + 'Peaks at ' + str(round(burst.peak_time, 2)) + 's\n' + t() + t() + 'A = ' + str(burst.amplitude) + '\n' + t() + t() + 'Sigma = ' + str(burst.sigma))
-        i += 1
+    if len(bursts) == 0 :
+        summary += '\nThere are no peaks to display.'
+    else :
+        for burst in bursts :
+            summary += ('\n' + t() + 'Peak ' + str(i) + '\n' + t() + t() + 'Peaks at ' + str(round(burst.peak_time, 2)) + 's\n' + t() + t() + 'A = ' + str(burst.amplitude) + '\n' + t() + t() + 'Sigma = ' + str(burst.sigma))
+            i += 1
     return summary
 
 def display_burst_info() :
     system('cls')
     print(burst_info_str())
-    press_enter_to_continue()
 
 def all_variables_str() : 
     summary = basic_sim_variables_str() + '\n' + trigger_variables_str()
@@ -372,21 +374,24 @@ def clear_bursts() :
     if ans == 'y' :
         bursts.clear()
         print('\nBurst list was successfully cleared.')
-        press_enter_to_continue()
 
 def add_burst_helper() :
     system('cls')
     functions_names = [add_sgrb, add_lgrb, return_to_burst_menu]
     menu_items = dict(enumerate(functions_names, start=0))
-    while True:
+    selection = -99
+    while selection not in range(len(menu_items) + 1):
         print(burst_info_str())
         print('\nAdd burst options: ')
         display_menu(menu_items)
-        selection = int(
-            input("Please enter your selection number: ")
-        )
-        selected_value = menu_items[selection]
-        selected_value()
+        try:
+            selection = int(
+                input("Please enter your selection number: ")
+            )
+        except:
+            continue
+    selected_value = menu_items[selection]
+    selected_value()
 
 def add_burst() :
     system('cls')
@@ -409,26 +414,33 @@ def add_lgrb() :
 
 def add_grb(burst) :
     system('cls')
-    print(burst_info_str())
-    print('\nDefault parameters: ')
-    print('\tPeaks at ' + str(burst.peak_time) + '\n\tA = ' + str(burst.amplitude) + '\n\tSigma = ' + str(burst.sigma))
+ 
     ans = 99
     while ans != 0 and ans != 1 and ans != 2:
+        print(burst_info_str())
+        print('\nDefault parameters: ')
+        print('\tPeaks at ' + str(burst.peak_time) + '\n\tA = ' + str(burst.amplitude) + '\n\tSigma = ' + str(burst.sigma))
         print('\nWould you like to \n\t0: Add the default burst\n\t1: Modify the burst\n\t2: Return to menu')
-        ans = int(input('\nEnter 0, 1, or 2: '))
+        try : 
+            ans = int(input('\nEnter 0, 1, or 2: '))
+        except :
+            continue
     if ans == 0 :
         bursts.append(burst)
         i = 99
         while i != 0 and i != 1 :
-            i = int(input('Success! Press 0 to add another burst or 1 to return to main menu'))
+            try:
+                i = int(input('Success! Press 0 to add another burst or 1 to return to main menu'))
+            except:
+                continue
         if i == 0 :
             add_burst_helper()
         else :
             return_to_main_menu()
-    elif ans == 1 :
+    if ans == 1 :
         modify(burst)
-    else :
-        press_enter_to_continue
+    if ans == 2 :
+        press_enter_to_continue()
 
 def modify(burst) :
     system('cls')
