@@ -5,10 +5,50 @@ from lifo_queue import FixedLengthLIFOQueue
 from grb import *
 from collections import deque
 import sys
+import os
 from os import system
+import fnmatch
 from config import *
 
-np.random.seed(random_seed)     
+state = GlobalState()
+
+def init_vars():
+    global duration, rate, size_list, running_avg_length, ebe_bin_length, enter_significance_constant, tail
+    global enter_look_back_to, trigger_threshold_met, triggered_timestamp, exit_timestamp, exit_significance_constant
+    global exit_look_back_to, show_peak_data, random_seed, sgrb_peak_time, sgrb_A, sgrb_sigma, lgrb_peak_time, lgrb_A, lgrb_sigma
+
+    duration = state.vars['duration']                        # Duration of the simulation in seconds
+    rate = state.vars['rate']                             # Rate of photon arrival per second
+    size_list = state.vars['size_list']                      # Length of the photon list queue
+    running_avg_length = state.vars['running_avg_length']               # Length of running average
+    ebe_bin_length = state.vars['ebe_bin_length']                  # Event-by-event bin length (in s) --- this should be configured later on to be variable, discuss with science people for how to go about this
+
+    # Default trigger parameters
+    enter_significance_constant = state.vars['enter_significance_constant']       # Standard deviation multiplier for trigger algorithm
+    tail = state.vars['tail']                              # Length of recent data to ignore when calculating running avg/variance for trigger
+    enter_look_back_to = state.vars['enter_look_back_to']              # Length of time we look back through when calculating sigma for trigger threshold
+    trigger_threshold_met = state.vars['trigger_threshold_met']         # Flag for trigger algorithm
+    triggered_timestamp = state.vars['triggered_timestamp']            # Timestamp for when event-by-event is triggered
+    exit_timestamp = state.vars['exit_timestamp']                 # Timestamp for when event-by-event is exited
+    exit_significance_constant = state.vars['exit_significance_constant']        # Standard deviation multiplier for exiting event-by-event
+    exit_look_back_to = state.vars['exit_look_back_to']                # Length of time we look back when calculating sigma for exiting event-by-event
+
+    show_peak_data = state.vars['show_peak_data']
+    random_seed = state.vars['random_seed']                     # Seed for reproducibility
+
+    # Default GRB parameters
+    # Short GRB
+    sgrb_peak_time = duration / 2
+    sgrb_A = state.vars['sgrb_A']
+    sgrb_sigma = state.vars['sgrb_sigma']
+
+    # Long GRB - note: to simulate a long grb, multiple of these peaks are required in sucession
+    lgrb_peak_time = duration / 2
+    lgrb_A = state.vars['lgrb_A']
+    lgrb_sigma = state.vars['lgrb_sigma']
+
+init_vars()
+np.random.seed(random_seed) 
 
 # Define the power law function - this is used to create random background energy
 def power_law(index, min_energy, max_energy):
@@ -30,7 +70,7 @@ def get_photon_next(rate):
     photon_energy = Get_Energy()
     return time_to_next_event, photon_energy
 
-bursts = [lgrb, grb(peak_time=duration/2 + 5, amplitude=3, sigma=5), grb(peak_time=duration/2 + 10, amplitude=2, sigma=5)]
+#bursts = [lgrb, grb(peak_time=duration/2 + 5, amplitude=3, sigma=5), grb(peak_time=duration/2 + 10, amplitude=2, sigma=5)]
 
 # Store data for plotting
 photon_count_data = []
@@ -43,6 +83,7 @@ photon_list_queue = deque(maxlen=size_list)
 
 def sim() : 
     # Start the simulation
+    init_vars()
     photon_count_data.clear()
     running_average.clear()
     photon_list_queue.clear()
@@ -158,7 +199,7 @@ def display_plots() :
 
     # Plot running average
     ax2.plot(running_average, 'o', label='Running Average', color='orange')
-    ax2.vlines(triggered_timestamp, y_range_min, y_range_max, label='EBE Entered')
+    ax2.vlines(triggered_timestamp, y_range_min, y_range_max, label='EBE Entered', colors='red')
     ax2.vlines(exit_timestamp, y_range_min, y_range_max, label='EBE Exited')
     ax2.annotate(str(round(triggered_timestamp,2)) + 's', (triggered_timestamp + 0.5, y_range_max * .8), xycoords='data', xytext=(-0.5,0), textcoords='offset fontsize', ha='right')
     ax2.annotate(str(round(exit_timestamp,2)) + 's', (exit_timestamp + 0.5, y_range_max * .8), xycoords='data', xytext=(0.5,0), textcoords='offset fontsize', ha='left')
@@ -202,46 +243,45 @@ def change_var(var, var_name, var_type, var_units) :
 
 #   Basic simulation variable mod methods
 def change_running_average_length() :
-    global running_avg_length
-    running_avg_length = change_var(running_avg_length, 'RUNNING AVG LENGTH', int, 's')
+    state.vars['running_avg_length'] = change_var(running_avg_length, 'RUNNING AVG LENGTH', int, 's')
+    init_vars()
 
 def change_rate() :
-    global rate
-    rate = change_var(rate, 'RATE', int, 'photons/s')
+    state.vars['rate'] = change_var(rate, 'RATE', int, 'photons/s')
+    init_vars()
 
 def change_duration() :
-    global duration
-    duration = change_var(duration, 'DURATION', int, 's')
+    state.vars['duration'] = change_var(duration, 'DURATION', int, 's')
+    init_vars()
 
 def change_photon_list_length() :
-    global size_list
-    size_list = change_var(size_list, 'PHOTON LIST SIZE', int, 'photons')
-
+    state.vars['size_list'] = change_var(size_list, 'PHOTON LIST SIZE', int, 'photons')
+    init_vars()
 
 #   Trigger modification methods
 def change_significance_constant() :
-    global enter_significance_constant
-    enter_significance_constant = change_var(enter_significance_constant, 'SIGNIFICANCE CONSTANT (TRIGGER)', float, '')
+    state.vars['enter_significance_constant'] = change_var(enter_significance_constant, 'SIGNIFICANCE CONSTANT (TRIGGER)', float, '')
+    init_vars()
 
 def change_exit_significance_constant() :
-    global exit_significance_constant
-    exit_significance_constant = change_var(exit_significance_constant, 'SIGNIFICANCE CONSTANT (EXIT TRIGGER)', float, '')
+    state.vars['exit_significance_constant'] = change_var(exit_significance_constant, 'SIGNIFICANCE CONSTANT (EXIT TRIGGER)', float, '')
+    init_vars()
 
 def change_tail_length() :
-    global tail
-    tail = change_var(tail, 'TAIL LENGTH', int, 's')
+    state.vars['tail'] = change_var(tail, 'TAIL LENGTH', int, 's')
+    init_vars()
 
 def change_enter_look_back_to() :
-    global enter_look_back_to
-    enter_look_back_to = change_var(enter_look_back_to, 'LOOK BACK TO (TRIGGER)', int, 's')
+    state.vars['enter_look_back_to'] = change_var(enter_look_back_to, 'LOOK BACK TO (TRIGGER)', int, 's')
+    init_vars()
 
 def change_exit_look_back_to() :
-    global exit_look_back_to
-    exit_look_back_to = change_var(exit_look_back_to, 'LOOK BACK TO (EXIT)', int, 's')
+    state.vars['exit_look_back_to'] = change_var(exit_look_back_to, 'LOOK BACK TO (EXIT)', int, 's')
+    init_vars()
 
 def change_event_by_event_bin_length() :
-    global ebe_bin_length
-    ebe_bin_length = change_var(ebe_bin_length, 'EVENT-BY-EVENT BIN LENGTH', float, 's')
+    state.vars['ebe_bin_length'] = change_var(ebe_bin_length, 'EVENT-BY-EVENT BIN LENGTH', float, 's')
+    init_vars()
 
 # tab function (pyplot won't allow \t)
 def t() :
@@ -466,6 +506,45 @@ def confirm_burst(burst) :
         bursts.append(burst)
         return_to_burst_menu()
 
+#   Save / Load methods
+def save_current_settings() :
+    ans = ''
+    while ans != 'y' and ans != 'n' :
+        ans = input('Would you like to save the current settings? (y/n) ')
+    if ans == 'y' : 
+        filename = input('Enter your desired filename: ')
+        state.save(filename + '.json')
+        print('The simulation was saved as ' + filename + '.json')
+
+def load_settings() :
+    ans = ''
+    while ans != 'y' and ans != 'n' :
+        ans = input('Would you like to load settings from a file? (y/n) ')
+    if ans == 'y' :
+        files = list_json_files()
+        file_options = dict(enumerate(files, start=0))
+        for k, file in file_options.items():
+            print('\t', k, file)
+        selection = -99
+        while selection not in range(0,len(files) + 1) :
+            try:
+                selection = int(
+                    input('\nPlease enter your selection number: ')
+                )
+            except:
+                continue
+        state.load(file_options[selection])
+        init_vars()
+        
+        
+def list_json_files():
+    curr_dir = os.getcwd()
+    json_files = []
+    for filename in os.listdir(curr_dir) :
+        if fnmatch.fnmatch(filename, '*.json'):
+            json_files.append(filename)
+    return json_files
+
 #   Menu methods
 def return_to_modification_menu() :
     modify_variables()
@@ -523,7 +602,8 @@ def display_menu(menu):
         print('\t', k, function.__name__)
 
 def main():
-    functions_names = [run_simulation_and_plot, display_all_variables, modify_variables, exit]
+    init_vars()
+    functions_names = [run_simulation_and_plot, display_all_variables, modify_variables, save_current_settings, load_settings, exit]
     menu('MAIN MENU', functions_names)
 
 def menu(name, functions):
