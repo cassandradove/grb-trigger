@@ -10,10 +10,11 @@
   <li>Default lgrb and sgrb objects</li>
   <li>Exit trigger funtionality, with customizable variables</li>
   <li>Light curve graph using simulated trigger timeline</li>
+  <li>Functionality to export/import data to simulate</li>
 </ul>
 
 <p>To Do:</p>
 <ul>
-  <li>Functionality to export/import data to simulate</li>
   <li>Create basic flares that look like the ones BTO will see</li>
+  <li>Expand save/load to include the customized bursts</li>
 </ul>
