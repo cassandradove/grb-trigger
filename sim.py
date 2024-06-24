@@ -88,8 +88,6 @@ light_curve_timestamps = []
 photon_list_queue = deque(maxlen=size_list)
 
 # Initialize queues for tail (will be pushed to light curve if triggered)
-tail_counts = deque(maxlen=int(tail / ebe_bin_length))
-tail_timestamps = deque(maxlen=int(tail / ebe_bin_length))
 
 def sim() : 
     # Start the simulation
@@ -100,6 +98,8 @@ def sim() :
     photon_list_queue.clear()
     light_curve_counts.clear()
     light_curve_timestamps.clear()
+    tail_counts = deque(maxlen=int(tail / ebe_bin_length))
+    tail_timestamps = deque(maxlen=int(tail / ebe_bin_length))
     np.random.seed(random_seed)
     
     current_time = 0
