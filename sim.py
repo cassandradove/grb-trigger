@@ -47,6 +47,12 @@ def init_vars():
     lgrb_A = state.vars['lgrb_A']
     lgrb_sigma = state.vars['lgrb_sigma']
 
+    # Default GRBs
+    global sgrb 
+    sgrb = grb(peak_time=duration/2, amplitude=sgrb_A, sigma = sgrb_sigma)
+    global lgrb 
+    lgrb = grb(peak_time=duration/2, amplitude=lgrb_A, sigma=lgrb_sigma)
+
 init_vars()
 np.random.seed(random_seed) 
 
@@ -70,7 +76,7 @@ def get_photon_next(rate):
     photon_energy = Get_Energy()
     return time_to_next_event, photon_energy
 
-#bursts = [lgrb, grb(peak_time=duration/2 + 5, amplitude=3, sigma=5), grb(peak_time=duration/2 + 10, amplitude=2, sigma=5)]
+bursts = [lgrb]
 
 # Store data for plotting
 photon_count_data = []
@@ -81,22 +87,34 @@ light_curve_timestamps = []
 # Initialize the FixedLengthLIFOQueue for photon counts
 photon_list_queue = deque(maxlen=size_list)
 
+# Initialize queues for tail (will be pushed to light curve if triggered)
+tail_counts = deque(maxlen=int(tail / ebe_bin_length))
+tail_timestamps = deque(maxlen=int(tail / ebe_bin_length))
+
 def sim() : 
     # Start the simulation
     init_vars()
+    
     photon_count_data.clear()
     running_average.clear()
     photon_list_queue.clear()
     light_curve_counts.clear()
     light_curve_timestamps.clear()
     np.random.seed(random_seed)
+    
     current_time = 0
+    
     ra_accumulated_time = 0         # running average accumulated time (helper)
     ebe_accumulated_time = 0        # event-by-event accumulated time (helper)
+    tail_accumulated_time = 0
+    
     photon_count_in_last_second = 0
     ebe_binned_photon_count = 0
+    tail_count = 0
+    
     trigger_threshold_met = False
     already_triggered = False
+    get_end_tail = False
 
     # Initialize the FixedLengthLIFOQueue for running averages
     photon_count_queue = FixedLengthLIFOQueue(running_avg_length)
@@ -106,6 +124,7 @@ def sim() :
 
         current_time += time_to_next_event
         ra_accumulated_time += time_to_next_event
+        tail_accumulated_time += time_to_next_event
 
         for burst in bursts :
             photon_count_in_last_second += burst.burst_addition(current_time)
@@ -119,7 +138,11 @@ def sim() :
                 trigger_threshold_met = True
                 global triggered_timestamp
                 triggered_timestamp = current_time
+                #light_curve_counts.append(photon_count_data[-1])
+                light_curve_counts.extend(list(tail_counts))
+                light_curve_timestamps.extend(list(tail_timestamps))
         
+        # Exit trigger logic
         if trigger_threshold_met :
             look_back_std = np.std(running_average[(-1 * exit_look_back_to) : (-1 * tail)])
             threshold = running_average[-1 * tail] - exit_significance_constant * look_back_std
@@ -128,11 +151,15 @@ def sim() :
                 global exit_timestamp
                 exit_timestamp = current_time
                 already_triggered = True
+                get_end_tail = True
+                tail_counts.clear()
+                tail_timestamps.clear()
 
         # Filling running average list
         if current_time < duration:
             photon_list_queue.appendleft((current_time, photon_energy))
             photon_count_in_last_second += 1
+            tail_count += 1
                 
             
             if ra_accumulated_time >= 1:
@@ -149,6 +176,16 @@ def sim() :
                 photon_count_in_last_second = 0
                 ra_accumulated_time -= 1
             
+            if tail_accumulated_time >= ebe_bin_length :
+                tail_counts.append(tail_count)
+                tail_timestamps.append(current_time)
+                tail_count = 0
+                tail_accumulated_time = 0
+                if get_end_tail and tail_counts.__len__() == tail_counts.maxlen :
+                    light_curve_counts.extend(tail_counts)
+                    light_curve_timestamps.extend(tail_timestamps)
+                    get_end_tail = False 
+
             # Filling lists for light curve
             if trigger_threshold_met :
                 for burst in bursts :
@@ -407,7 +444,7 @@ def add_burst() :
         press_enter_to_continue()
 
 def add_sgrb() :
-    add_grb(grb(sgrb_peak_time, sgrb_A, sgrb_sigma))
+    add_grb(grb(peak_time=sgrb_peak_time, amplitude=sgrb_A, sigma=sgrb_sigma))
 
 def add_lgrb() :
     add_grb(grb(lgrb_peak_time, lgrb_A, lgrb_sigma))
