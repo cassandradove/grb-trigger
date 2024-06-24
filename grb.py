@@ -1,13 +1,10 @@
 import numpy as np
 from config import *
 # Gamma ray burst class with default values
-class grb :
-    peak_time = np.random.uniform(0.25 * duration, 0.75 * duration)
-    amplitude = 5
-    sigma = 1
 
+class grb :
     # Quick initialization of a GRB with default values that can be overridden if so desired
-    def __init__(self, peak_time = np.random.uniform(0.25 * duration, 0.75 * duration), amplitude = 5, sigma = 1):
+    def __init__(self, peak_time = 50, amplitude = 5, sigma = 1):
         self.peak_time = peak_time
         self.amplitude = amplitude
         self.sigma = sigma
@@ -19,7 +16,3 @@ class grb :
     
     def __str__(self) :
         return 'Peak time: ' + str(round(self.peak_time, 2)) + 's, A=' + str(self.amplitude) + ', sigma=' + str(self.sigma)
-
-# Default GRBs
-sgrb = grb(sgrb_peak_time, amplitude=sgrb_A, sigma = sgrb_sigma)
-lgrb = grb(peak_time=lgrb_peak_time, amplitude=lgrb_A, sigma=lgrb_sigma)
