@@ -11,6 +11,7 @@
   <li>Exit trigger funtionality, with customizable variables</li>
   <li>Light curve graph using simulated trigger timeline</li>
   <li>Functionality to export/import data to simulate</li>
+  <li>Script to fit a gaussian curve to real data from a .dat file to help refine simulation model</li>
 </ul>
 
 <p>To Do:</p>
