@@ -1,6 +1,7 @@
 import json
 
 class GlobalState:
+    
     def __init__(self):
         self.vars = {
             'duration': 100,
