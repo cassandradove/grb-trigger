@@ -16,6 +16,7 @@ def init_vars():
     global duration, rate, size_list, running_avg_length, ebe_bin_length, enter_significance_constant, tail
     global enter_look_back_to, trigger_threshold_met, triggered_timestamp, exit_timestamp, exit_significance_constant
     global exit_look_back_to, show_peak_data, random_seed, sgrb_peak_time, sgrb_A, sgrb_sigma, lgrb_peak_time, lgrb_A, lgrb_sigma
+    global default_A, default_sigma
 
     duration = state.vars['duration']                        # Duration of the simulation in seconds
     rate = state.vars['rate']                             # Rate of photon arrival per second
@@ -47,11 +48,20 @@ def init_vars():
     lgrb_A = state.vars['lgrb_A']
     lgrb_sigma = state.vars['lgrb_sigma']
 
+    # Default GRB - this will load when the sim runs for the first time
+    default_peak_time = duration / 2
+    default_A = state.vars['default_A']
+    default_sigma = state.vars['default_sigma']
+
     # Default GRBs
     global sgrb 
     sgrb = grb(peak_time=duration/2, amplitude=sgrb_A, sigma = sgrb_sigma)
     global lgrb 
     lgrb = grb(peak_time=duration/2, amplitude=lgrb_A, sigma=lgrb_sigma)
+    global default_burst
+    default_burst = grb(peak_time=duration/2, amplitude=default_A, sigma=default_sigma)
+    global bursts
+    bursts = [default_burst]
 
 init_vars()
 np.random.seed(random_seed) 
@@ -64,7 +74,7 @@ def power_law(index, min_energy, max_energy):
 
 # Define the Get_Energy function
 def Get_Energy():
-    index = -0.1                # Index of the spectrum.
+    index = -0.9                # Index of the spectrum.
     min_energy = 1.0            # Minimum energy.
     max_energy = 1000.0         # Maximum energy.
     energy = power_law(index, min_energy, max_energy)
@@ -76,7 +86,7 @@ def get_photon_next(rate):
     photon_energy = Get_Energy()
     return time_to_next_event, photon_energy
 
-bursts = [lgrb]
+bursts = [default_burst]
 
 # Store data for plotting
 photon_count_data = []
@@ -91,7 +101,7 @@ photon_list_queue = deque(maxlen=size_list)
 
 def sim() : 
     # Start the simulation
-    init_vars()
+    #init_vars()
     
     photon_count_data.clear()
     running_average.clear()
@@ -100,8 +110,8 @@ def sim() :
     light_curve_timestamps.clear()
     tail_counts = deque(maxlen=int(tail / ebe_bin_length))
     tail_timestamps = deque(maxlen=int(tail / ebe_bin_length))
-    np.random.seed(random_seed)
     
+    global bursts
     current_time = 0
     
     ra_accumulated_time = 0         # running average accumulated time (helper)
@@ -116,6 +126,8 @@ def sim() :
     already_triggered = False
     get_end_tail = False
 
+    entered_ebe_threshold = -99
+
     # Initialize the FixedLengthLIFOQueue for running averages
     photon_count_queue = FixedLengthLIFOQueue(running_avg_length)
 
@@ -126,27 +138,40 @@ def sim() :
         ra_accumulated_time += time_to_next_event
         tail_accumulated_time += time_to_next_event
 
-        for burst in bursts :
-            photon_count_in_last_second += burst.burst_addition(current_time)
-
-        # Logic determining if we trigger threshold has been met
+        # Logic determining if trigger threshold has been met
         if current_time > enter_look_back_to and not already_triggered:
-            look_back_std = np.std(running_average[(-1 * enter_look_back_to) : (-1 * tail)])
-            threshold = running_average[-1 * tail] + enter_significance_constant * look_back_std
             
-            if (trigger_threshold_met == False and photon_count_data[-1] >= threshold) :
+            # standard devation of the last n seconds, not including a tail
+            look_back_std = np.std(running_average[(-1 * enter_look_back_to) : (-1 * tail)])
+            
+            # threshold to trigger is last running average count (not including tail) + c * look_back_std       
+            threshold = running_average[-1 * tail] + enter_significance_constant * look_back_std    
+            
+            if (trigger_threshold_met == False and running_average[-1] >= threshold) :
+                entered_ebe_threshold = running_average[-1]
                 trigger_threshold_met = True
+                
                 global triggered_timestamp
                 triggered_timestamp = current_time
-                #light_curve_counts.append(photon_count_data[-1])
+
                 light_curve_counts.extend(list(tail_counts))
                 light_curve_timestamps.extend(list(tail_timestamps))
         
         # Exit trigger logic
         if trigger_threshold_met :
-            look_back_std = np.std(running_average[(-1 * exit_look_back_to) : (-1 * tail)])
-            threshold = running_average[-1 * tail] - exit_significance_constant * look_back_std
-            if photon_count_data[-1] <= threshold : 
+            # look_back_std = np.std(running_average[(-1 * exit_look_back_to) : (-1 * tail)])
+            # threshold = running_average[-1 * tail] - exit_significance_constant * look_back_std
+            # if running_average[-1] <= threshold  and running_average[-1] < 1.5 * entered_ebe_threshold: 
+            #     trigger_threshold_met = False
+            #     global exit_timestamp
+            #     exit_timestamp = current_time
+            #     already_triggered = True
+            #     get_end_tail = True
+            #     tail_counts.clear()
+            #     tail_timestamps.clear()
+
+            der = approximate_derivative(running_average[-1], running_average[-3], 2)
+            if (-0.25 < der < 0.25) :
                 trigger_threshold_met = False
                 global exit_timestamp
                 exit_timestamp = current_time
@@ -159,10 +184,15 @@ def sim() :
         if current_time < duration:
             photon_list_queue.appendleft((current_time, photon_energy))
             photon_count_in_last_second += 1
+            # for burst in bursts :
+            #     photon_count_in_last_second += burst.burst_addition(current_time)
             tail_count += 1
                 
             
             if ra_accumulated_time >= 1:
+                for burst in bursts :
+                    photon_count_in_last_second += burst.burst_addition(current_time)
+                
                 # Push the photon count for the last second into the photon count queues
                 photon_count_queue.push(photon_count_in_last_second)
                 
@@ -174,9 +204,11 @@ def sim() :
 
                 # Reset for the next second
                 photon_count_in_last_second = 0
-                ra_accumulated_time -= 1
+                ra_accumulated_time = 0
             
             if tail_accumulated_time >= ebe_bin_length :
+                for burst in bursts :
+                    tail_count += burst.burst_addition(current_time)
                 tail_counts.append(tail_count)
                 tail_timestamps.append(current_time)
                 tail_count = 0
@@ -188,16 +220,20 @@ def sim() :
 
             # Filling lists for light curve
             if trigger_threshold_met :
-                for burst in bursts :
-                    ebe_binned_photon_count += burst.burst_addition(current_time)
+                # for burst in bursts :
+                #     ebe_binned_photon_count += burst.burst_addition(current_time)
                 ebe_accumulated_time += time_to_next_event
                 ebe_binned_photon_count += 1 
                 if ebe_accumulated_time >= ebe_bin_length :
+                    for burst in bursts :
+                        ebe_binned_photon_count += burst.burst_addition(current_time)
                     light_curve_counts.append(ebe_binned_photon_count)
                     light_curve_timestamps.append(current_time)
 
                     ebe_accumulated_time = 0
                     ebe_binned_photon_count = 0
+    if triggered_timestamp > 0 and exit_timestamp < 0 :
+        exit_timestamp = duration
 
 def display_plots() :
     # Determine the common y-axis range
@@ -235,19 +271,13 @@ def display_plots() :
     ax1.legend()
 
     # Plot running average
-    ax2.plot(running_average, 'o', label='Running Average', color='orange')
-    ax2.vlines(triggered_timestamp, y_range_min, y_range_max, label='EBE Entered', colors='red')
-    ax2.vlines(exit_timestamp, y_range_min, y_range_max, label='EBE Exited')
-    ax2.annotate(str(round(triggered_timestamp,2)) + 's', (triggered_timestamp + 0.5, y_range_max * .8), xycoords='data', xytext=(-0.5,0), textcoords='offset fontsize', ha='right')
-    ax2.annotate(str(round(exit_timestamp,2)) + 's', (exit_timestamp + 0.5, y_range_max * .8), xycoords='data', xytext=(0.5,0), textcoords='offset fontsize', ha='left')
-    ax2.set_xlabel('Time (seconds)')
-    ax2.set_ylabel('Running Average')
-    ax2.set_title('Running Average of Photon Count (' + str(running_avg_length) + ' seconds)')
-    ax2.set_ylim(y_range_min, y_range_max)  # Set the same y-axis range for all plots
-    ax2.legend()
+    plot_running_avg(ax2, y_range_min, y_range_max, bursts[0].amplitude, bursts[0].sigma)
 
     # Plot light curve
-    ax3.stairs(light_curve_counts[1:], light_curve_timestamps, color='red')
+    try : 
+        ax3.stairs(light_curve_counts[1:], light_curve_timestamps, color='red')
+    except :
+        ax3.text(1,1,'No light curve available')
     ax3.set_xlabel('Time')
     ax3.set_ylabel('Counts')
     ax3.set_title('Light Curve')
@@ -259,6 +289,85 @@ def display_plots() :
     textbox_ax.text(0.1, 0.5, all_variables_str(), verticalalignment='center', horizontalalignment='left')
     plt.tight_layout()
     plt.show()
+
+def approximate_derivative(curr_val, prev_value, time_between) :
+    return (curr_val - prev_value) / (2 * time_between)
+
+def plot_running_avg(ax, y_min, y_max, A, sigma) :
+    ax.plot(running_average, 'o', label='Running Average', color='orange')
+    if (triggered_timestamp > 0) :
+        ax.vlines(triggered_timestamp, y_min, y_max, label='EBE Entered', colors='red')
+    if (exit_timestamp > 0) :
+        ax.vlines(exit_timestamp, y_min, y_max, label='EBE Exited')
+    ax.annotate(str(round(triggered_timestamp,2)) + 's', (triggered_timestamp + 0.5, y_max * .8), xycoords='data', xytext=(-0.5,0), textcoords='offset fontsize', ha='right')
+    ax.annotate(str(round(exit_timestamp,2)) + 's', (exit_timestamp + 0.5, y_max * .8), xycoords='data', xytext=(0.5,0), textcoords='offset fontsize', ha='left')
+    ax.set_xlabel('Time (seconds)')
+    ax.set_ylabel('Running Average')
+    ax.set_title('Running Average of Photon Count (' + str(running_avg_length) + ' seconds)\nA = ' + str(A) + ', sigma = ' + str(sigma))
+    ax.set_ylim(y_min, y_max)
+    ax.legend(loc='upper left')
+
+def run_tests() : 
+    amplitudes = [8.7, 87, 870, 8700]
+    photon_count_data.clear()
+    running_average.clear()
+    plot_tests([0.005, 0.05, 0.5], amplitudes)
+    plot_tests([5, 50, 250], amplitudes)
+
+def plot_tests(sigmas, amplitudes) :
+    running_avg = plt.figure(constrained_layout=True)
+    running_avg.clear()
+    gs = gridspec.GridSpec(sigmas.__len__(), amplitudes.__len__(), figure=running_avg)
+
+    light_curve = plt.figure(constrained_layout=True)
+    light_curve.clear()
+    lc_gs = gridspec.GridSpec(sigmas.__len__(), amplitudes.__len__(), figure=light_curve)
+
+    row = 0
+    column = 0
+    for sigma in sigmas :
+        for amplitude in amplitudes :
+            bursts.clear()
+            state.vars['default_A'] = amplitude
+            state.vars['default_sigma'] = sigma
+            
+            if (sigma > 100) :
+                state.vars['duration'] = 500
+            else :
+                state.vars['duration'] = 100
+            
+            init_vars()
+            sim()
+            ax = running_avg.add_subplot(gs[row, column])
+            ax.plot(running_average, 'o', color='blue')
+            ax.set_xlabel('time (s)', fontsize='small')
+            ax.set_ylabel('running avg\n(counts/s)', fontsize='small')
+            ax.set_ylim(top=max(running_average) * 1.2)
+            if (triggered_timestamp > 0) :
+                ax.axvline(triggered_timestamp, color='orange')
+                ax.axvline(triggered_timestamp - tail, color='gray', linestyle='dashed')
+            if (exit_timestamp > 0) :
+                if exit_timestamp == duration :
+                    ax.axvline(exit_timestamp, color='black')
+                else :
+                    ax.axvline(exit_timestamp, color='orange')
+                    ax.axvline(exit_timestamp + tail, color = 'gray', linestyle='dashed')
+            ax.set_title('A = ' + str(amplitude) + ', sigma = ' + str(sigma), fontsize='small', loc='left')
+
+            ax2 = light_curve.add_subplot(lc_gs[row, column])
+            if (light_curve_counts != [] and light_curve_timestamps != []) :
+                ax2.stairs(light_curve_counts[1:], light_curve_timestamps, color='red')
+                ax2.set_xlabel('Time')
+                ax2.set_ylabel('Counts')
+            ax2.set_title('A = ' + str(amplitude) + ', sigma = ' + str(sigma), fontsize='small', loc='left')
+            column = column + 1
+        column = 0
+        row = row + 1
+    running_avg.suptitle('Running Average of Photon Count (' + str(running_avg_length) + 's)')
+    plt.rc('font', size=6)
+    #plt.tight_layout()
+    plt.show()
+
 
 #   Variable Modification Methods
 
@@ -382,7 +491,6 @@ def display_all_variables() :
     if x == '1' :
         return_to_main_menu()
 
-
 #   Burst list modification methods
 def delete_burst() :
     system('cls')
@@ -409,6 +517,7 @@ def clear_bursts() :
             '\nWould you like to delete all bursts? (y/n) '
         )
     if ans == 'y' :
+        global bursts
         bursts.clear()
         print('\nBurst list was successfully cleared.')
 
@@ -463,6 +572,7 @@ def add_grb(burst) :
         except :
             continue
     if ans == 0 :
+        global bursts
         bursts.append(burst)
         i = 99
         while i != 0 and i != 1 :
@@ -503,6 +613,7 @@ def modify(burst) :
         while conf != 'y' and conf != 'n' :
             conf = input('Confirm modifications and add to simulation? (y/n) ')
         if conf == 'y' :
+            global bursts
             bursts.append(burst)
             i = 99
             while i != 0 and i != 1 :
@@ -582,6 +693,7 @@ def load_settings() :
                 )
             except:
                 continue
+        bursts.clear()
         state.load(file_options[selection])
         init_vars()
         
@@ -652,7 +764,7 @@ def display_menu(menu):
 
 def main():
     init_vars()
-    functions_names = [run_simulation_and_plot, display_all_variables, modify_variables, save_current_settings, load_settings, exit]
+    functions_names = [run_simulation_and_plot, display_all_variables, modify_variables, run_tests, save_current_settings, load_settings, exit]
     menu('MAIN MENU', functions_names)
 
 def menu(name, functions):
