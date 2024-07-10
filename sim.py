@@ -74,7 +74,7 @@ def power_law(index, min_energy, max_energy):
 
 # Define the Get_Energy function
 def Get_Energy():
-    index = -0.9                # Index of the spectrum.
+    index = -0.1                # Index of the spectrum.
     min_energy = 1.0            # Minimum energy.
     max_energy = 1000.0         # Maximum energy.
     energy = power_law(index, min_energy, max_energy)
@@ -97,7 +97,7 @@ light_curve_timestamps = []
 # Initialize the FixedLengthLIFOQueue for photon counts
 photon_list_queue = deque(maxlen=size_list)
 
-# Initialize queues for tail (will be pushed to light curve if triggered)
+
 
 def sim() : 
     # Start the simulation
@@ -110,6 +110,10 @@ def sim() :
     light_curve_timestamps.clear()
     tail_counts = deque(maxlen=int(tail / ebe_bin_length))
     tail_timestamps = deque(maxlen=int(tail / ebe_bin_length))
+    
+    # Initialize deque for delay ring buffer
+    delay_buffer = deque(maxlen=rate)
+    delay_buffer_binsize = ebe_bin_length
     
     global bursts
     current_time = 0
@@ -145,9 +149,11 @@ def sim() :
             look_back_std = np.std(running_average[(-1 * enter_look_back_to) : (-1 * tail)])
             
             # threshold to trigger is last running average count (not including tail) + c * look_back_std       
-            threshold = running_average[-1 * tail] + enter_significance_constant * look_back_std    
-            
-            if (trigger_threshold_met == False and running_average[-1] >= threshold) :
+            #threshold = running_average[-1 * tail] + enter_significance_constant * look_back_std    
+            threshold = tail_counts[0] + enter_significance_constant * look_back_std
+
+            #if (trigger_threshold_met == False and running_average[-1] >= threshold) :
+            if (trigger_threshold_met == False and tail_counts[-1] >= threshold) :
                 entered_ebe_threshold = running_average[-1]
                 trigger_threshold_met = True
                 
@@ -159,6 +165,7 @@ def sim() :
         
         # Exit trigger logic
         if trigger_threshold_met :
+            ## OLD LOGIC - DOESN'T WORK ALL THAT WELL 
             # look_back_std = np.std(running_average[(-1 * exit_look_back_to) : (-1 * tail)])
             # threshold = running_average[-1 * tail] - exit_significance_constant * look_back_std
             # if running_average[-1] <= threshold  and running_average[-1] < 1.5 * entered_ebe_threshold: 
@@ -168,10 +175,10 @@ def sim() :
             #     already_triggered = True
             #     get_end_tail = True
             #     tail_counts.clear()
-            #     tail_timestamps.clear()
+            #    tail_timestamps.clear()
 
-            der = approximate_derivative(running_average[-1], running_average[-3], 2)
-            if (-0.25 < der < 0.25) :
+            der = approximate_derivative(tail_counts[-1], tail_counts[-2], tail_timestamps[-1] - tail_timestamps[-2])
+            if (-0.001 < der < 0.001 and tail_counts[-1] < 1.25 * entered_ebe_threshold) :
                 trigger_threshold_met = False
                 global exit_timestamp
                 exit_timestamp = current_time
@@ -312,7 +319,7 @@ def run_tests() :
     photon_count_data.clear()
     running_average.clear()
     plot_tests([0.005, 0.05, 0.5], amplitudes)
-    plot_tests([5, 50, 250], amplitudes)
+    plot_tests([5, 50, 500], amplitudes)
 
 def plot_tests(sigmas, amplitudes) :
     running_avg = plt.figure(constrained_layout=True)
@@ -356,9 +363,11 @@ def plot_tests(sigmas, amplitudes) :
 
             ax2 = light_curve.add_subplot(lc_gs[row, column])
             if (light_curve_counts != [] and light_curve_timestamps != []) :
-                ax2.stairs(light_curve_counts[1:], light_curve_timestamps, color='red')
+                lc_counts_per_s = [i / ebe_bin_length for i in light_curve_counts]
+                ax2.stairs(lc_counts_per_s[1:], light_curve_timestamps, color='red')
                 ax2.set_xlabel('Time')
-                ax2.set_ylabel('Counts')
+                ax2.set_ylabel('Counts/s')
+                ax2.axhline(rate, color='blue')
             ax2.set_title('A = ' + str(amplitude) + ', sigma = ' + str(sigma), fontsize='small', loc='left')
             column = column + 1
         column = 0
